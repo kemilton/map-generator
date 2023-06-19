@@ -129,6 +129,7 @@
 				specific timeframe.
 			</small>
 
+			<Checkbox v-model:checked="settings.hideMarkers" label="Hide markers" />
 		</div>
 
 		<Button v-if="canBeStarted" @click="handleClickStart" :class="state.started ? 'bg-danger' : 'bg-success'"
@@ -193,6 +194,7 @@ const settings = reactive({
 	checkAllDates: false,
 	num_of_generators: 1,
 	getIntersection: false,
+	hideMarkers: false,
 	deadEndsOnly: false,
 	lookBackwards: false,
 });
@@ -449,16 +451,18 @@ const generate = async (country) => {
 						if (!country.coordSet.has(locHash) || !settings.rejectDuplicates) {
 							country.found.push(res.value);
 							country.coordSet.add(locHash);
-							L.marker([res.value.lat, res.value.lng], { icon: myIcon })
-								.on("click", () => {
-									window.open(
-										`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${res.value.lat},${res.value.lng}
-										${res.value.heading ? "&heading=" + res.value.heading : ""}
-										${res.value.pitch ? "&pitch=" + res.value.pitch : ""}`,
-										"_blank"
-									);
-								})
-								.addTo(markerLayer);
+							if(!settings.hideMarkers){
+								L.marker([res.value.lat, res.value.lng], { icon: myIcon })
+									.on("click", () => {
+										window.open(
+											`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${res.value.lat},${res.value.lng}
+											${res.value.heading ? "&heading=" + res.value.heading : ""}
+											${res.value.pitch ? "&pitch=" + res.value.pitch : ""}`,
+											"_blank"
+										);
+									})
+									.addTo(markerLayer);
+							}
 						}
 					}
 				}
