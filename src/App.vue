@@ -6,9 +6,9 @@
 			<h4 class="select mb-2">{{ select }}</h4>
 			<div v-if="error" class="bg-danger">{{ error }}</div>
 			<div class="flex gap">
-				<Button @click="loadFromClipboard" class="bg-success" text="import from clipboard" title="import from clipboard" />
+				<Button @click="loadFromClipboard" class="bg-success" text="import polygons from clipboard" title="import from clipboard" />
 				<input @change="loadFromJSON" type="file" id="file" class="input-file" accept="application/json" />
-				<label for="file" class="btn bg-success">Import JSON</label>
+				<label for="file" class="btn bg-success">Import polygons from GeoJSON</label>
 			</div>
 		</div>
 		<div v-if="!state.started">
@@ -128,6 +128,7 @@
 				icon). This is helpful for finding coverage within a
 				specific timeframe.
 			</small>
+			<hr />
 
 			<Checkbox v-model:checked="settings.hideMarkers" label="Hide markers" />
 		</div>
