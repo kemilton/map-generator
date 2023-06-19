@@ -4,8 +4,18 @@
 		<Logo class="mb-2" />
 		<div v-if="!state.started">
 			<h4 class="select mb-2">{{ select }}</h4>
+			<div v-if="error" class="bg-danger">{{ error }}</div>
 			<div class="flex gap">
-				<Button @click="selectAll" class="bg-success" text="Select all" title="Select all" />
+				<Button @click="loadFromClipboard" class="bg-success" text="import from clipboard" title="import from clipboard" />
+				<input @change="loadFromJSON" type="file" id="file" class="input-file" accept="application/json" />
+				<label for="file" class="btn bg-success">Import JSON</label>
+			</div>
+		</div>
+		<div v-if="!state.started">
+			<div class="flex gap">
+				<Button @click="selectAllCountries" class="bg-success" text="Select all Countries" title="Select all Countries" />
+				<Button v-if="imported" @click="selectAllImports" class="bg-success" text="Select All Imports"
+					title="Select All Imports" />
 				<Button v-if="selected.length" @click="deselectAll" class="bg-danger" text="Deselect all"
 					title="Deselect all" />
 			</div>
@@ -118,6 +128,7 @@
 				icon). This is helpful for finding coverage within a
 				specific timeframe.
 			</small>
+
 		</div>
 
 		<Button v-if="canBeStarted" @click="handleClickStart" :class="state.started ? 'bg-danger' : 'bg-success'"
@@ -186,20 +197,23 @@ const settings = reactive({
 	lookBackwards: false,
 });
 
+const error = ref("");
+
 const select = ref("Select a country or draw a polygon");
 const selected = ref([]);
+const imported = ref(0);
 const canBeStarted = computed(() => selected.value.some((country) => country.found.length < country.nbNeeded));
 const hasResults = computed(() => selected.value.some((country) => country.found.length > 0));
 const hashCoords = (res) => { return res.lat + "," + res.lng };
 
 let map;
+const ImportedPolygonsLayer = new L.FeatureGroup();
 const customPolygonsLayer = new L.FeatureGroup();
 const markerLayer = L.layerGroup();
 const geojson = L.geoJson(borders, {
 	style: style,
 	onEachFeature: onEachFeature,
 });
-
 
 const roadmapBaseLayer = L.tileLayer("https://www.google.com/maps/vt?pb=!1m7!8m6!1m3!1i{z}!2i{x}!3i{y}!2i9!3x1!2m2!1e0!2sm!3m5!2sen!3sus!5e1105!12m1!1e3!4e0!5m4!1e0!8m2!1e1!1e1!6m6!1e12!2i2!11e0!39b0!44e0!50e0");
 const roadmapLabelsLayer = L.tileLayer("https://www.google.com/maps/vt?pb=!1m7!8m6!1m3!1i{z}!2i{x}!3i{y}!2i9!3x1!2m2!1e0!2sm!3m5!2sen!3sus!5e1105!12m1!1e15!4e0!5m4!1e0!8m2!1e1!1e1!6m6!1e12!2i2!11e0!39b0!44e0!50e0",
@@ -252,6 +266,64 @@ const drawControl = new L.Control.Draw({
 	edit: { featureGroup: customPolygonsLayer },
 });
 
+// Import
+const loadFromClipboard = () => {
+	navigator.clipboard
+		.readText()
+		.then((data) => {
+			checkJSON(data);
+		})
+		.catch((err) => {
+			error.value = "Something went wrong.";
+		});
+};
+
+const loadFromJSON = (e) => {
+	const files = e.target.files || e.dataTransfer.files;
+	if (!files.length) return;
+	readFile(files[0]);
+};
+
+const readFile = (file) => {
+	const reader = new FileReader();
+	reader.onload = (e) => {
+		checkJSON(e.target.result);
+	};
+	reader.readAsText(file);
+};
+
+//const hasLatLng = (objectArray) => objectArray.every(obj => obj.hasOwnProperty('lat')) && objectArray.every(obj => obj.hasOwnProperty('lng'));
+
+//const hasCoordinates = (objectArray) => objectArray.every(obj => {obj.hasOwnProperty('coorinates') && hasLatLng(obj)});
+
+const checkJSON = (data) => {
+	try {
+		let mapData = JSON.parse(data);
+		let customgeojson = L.geoJson(mapData, {
+			style: customPolygonStyle,
+			onEachFeature: function(feature, layer) {
+				imported.value ++;
+				layer.found = []
+				layer.coordSet = new Set();
+				layer.nbNeeded = 100;
+				layer.setStyle(customPolygonStyle());
+				layer.setStyle(highlighted());
+				layer.on("mouseover", (e) => highlightFeature(e));
+				layer.on("mouseout", (e) => resetHighlight(e));
+				layer.on("click", (e) => selectCountry(e));
+				layer.feature.properties.name = `Imported Polygon `+ imported.value;
+				ImportedPolygonsLayer.addLayer(layer);
+			}
+		});
+		error.value = "";
+		state.loaded = true;
+	} catch (err) {
+		console.log(err)
+		state.loaded = false;
+		error.value = "Invalid map data";
+	}
+};
+
 onMounted(() => {
 	map = L.map("map", {
 		attributionControl: false,
@@ -266,6 +338,7 @@ onMounted(() => {
 	map.getPane("labelPane").style.zIndex = 300;
 
 	geojson.addTo(map);
+	ImportedPolygonsLayer.addTo(map);
 	customPolygonsLayer.addTo(map);
 	roadmapLayer.addTo(map);
 	gsvLayer2.addTo(map);
@@ -434,7 +507,7 @@ function selectCountry(e) {
 	}
 }
 
-function selectAll() {
+function selectAllCountries() {
 	selected.value = geojson.getLayers().map((country) => {
 		if (!country.found) country.found = [];
 		if (!country.coordSet) country.coordSet = new Set();
@@ -444,10 +517,21 @@ function selectAll() {
 	geojson.setStyle(highlighted);
 }
 
+function selectAllImports() {
+	selected.value = ImportedPolygonsLayer.getLayers().map((country) => {
+		if (!country.found) country.found = [];
+		if (!country.coordSet) country.coordSet = new Set();
+		if (!country.nbNeeded) country.nbNeeded = 100;
+		return country;
+	});
+	ImportedPolygonsLayer.setStyle(highlighted);
+}
+
 function deselectAll() {
 	selected.value.length = 0;
 	geojson.setStyle(style());
 	customPolygonsLayer.setStyle(customPolygonStyle());
+	ImportedPolygonsLayer.setStyle(customPolygonStyle())
 }
 
 function highlightFeature(e) {
